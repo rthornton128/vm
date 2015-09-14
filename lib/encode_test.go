@@ -1,19 +1,33 @@
 package vm_test
 
-/*
-func TestEncodeMagicOnly(t *testing.T) {
+import (
+	"bytes"
+	"log"
+	"testing"
+
+	vm "github.com/rthornton128/vm/lib"
+)
+
+func TestEncodeMinimal(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
-	e.Encode([]byte{})
-	output := b.Bytes()
-	for i := range output {
-		if output[i] != []byte{0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xe}[i] {
-			t.Log(output)
-			t.FailNow()
-		}
+	if err := e.Encode([]byte{}); err != nil {
+		log.Fatal(err)
+	}
+
+	expect := []byte{
+		0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf, // magic
+		0x0, 0x0, // entry
+		0x0, 0x0, // relocation table
+		0x0, 0x0, // symbol table
+		0x0, 0x0, // sections
+	}
+	if !bytes.Equal(b.Bytes(), expect) {
+		t.Fatal("expected", expect, "got", b.Bytes())
 	}
 }
 
+/*
 func TestLiteral(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)

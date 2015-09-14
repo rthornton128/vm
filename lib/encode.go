@@ -8,24 +8,16 @@ import (
 	"strconv"
 )
 
-type symbol struct {
-	index uint16
-	size  uint16
-}
-
 type Encoder struct {
 	io.Writer
 	buf  *bytes.Buffer
+	ob   Object
 	stab map[string]uint16
 }
 
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{Writer: w, buf: new(bytes.Buffer),
 		stab: make(map[string]uint16)}
-}
-
-func addrOf(i int16) []byte {
-	return []byte{byte(i >> 8), byte(i & 0xff)}
 }
 
 func (e *Encoder) Encode(src []byte) error {
@@ -42,43 +34,16 @@ func (e *Encoder) Encode(src []byte) error {
 		log.Fatal(err)
 	}
 
-	// magic number
-	e.Write(e.Writer, 0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf)
-
-	// entry point
-	b := toBytes(e.stab["main"])
-	e.Write(e.Writer, b[0], b[1])
-
-	// symbol table offset
-	//e.Write(addrOf(e.sz + 12))
-
-	// program text
-	e.Write(e.Writer, e.buf.Bytes()...)
-
-	// symbol table
-	//for _, v := range e.stab {
-	//e.Write(addrOf(v)) // index
-	//e.Write(addrOf(0)) // address
-	//}
+	_, err := e.Write(e.ob.Bytes())
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return nil
 }
 
-/*
-func (e *Encoder) data(d *secData) {
-	if d != nil {
-		for _, v := range d.data {
-			e.emit([]byte{v})
-		}
-	}
-}
-*/
 func (e *Encoder) emit(b ...byte) {
-	e.Write(e.buf, b...)
-}
-
-func (e *Encoder) Write(w io.Writer, b ...byte) {
-	n, err := w.Write(b)
+	n, err := e.Write(b)
 	if n != len(b) {
 		log.Println("failed to write all bytes")
 	}
@@ -88,16 +53,31 @@ func (e *Encoder) Write(w io.Writer, b ...byte) {
 }
 
 func (e *Encoder) file(f *File) error {
-	for k, s := range f.sections[0].(*TextSection).m {
-		e.stab[k] = uint16(e.buf.Len())
-		if k == "main" {
-			defer e.sub(s)
-			continue
+	if len(f.sections) > 0 {
+		e.sections(f.sections)
+	}
+	return nil
+}
+
+// TODO horrific, section handling needs massive (re)work
+func (e *Encoder) sections(secs []Section) {
+	for _, s := range secs {
+		switch x := s.(type) {
+		case *TextSection:
+			for k, v := range x.m {
+				e.stab[k] = uint16(e.buf.Len())
+				if k == "main" {
+					defer e.sub(v)
+					continue
+				}
+				e.sub(v)
+			}
+		default:
+			log.Fatal("unexpected section type")
 		}
-		e.sub(s)
 	}
 	fmt.Println(e.stab)
-	return nil
+	return
 }
 
 func (e *Encoder) sub(il []*Instruction) {
