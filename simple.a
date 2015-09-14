@@ -1,0 +1,14 @@
+.text
+add:
+mov %b
+add %c
+ret
+
+main:
+cla
+mvi 3
+mvr %b
+mvi 5
+mvr %c
+call $add
+ret
