@@ -46,8 +46,8 @@ func (e *Encoder) Encode(src []byte) error {
 	e.Write(e.Writer, 0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf)
 
 	// entry point
-	msb, lsb := toBytes(e.stab["main"])
-	e.Write(e.Writer, msb, lsb)
+	b := toBytes(e.stab["main"])
+	e.Write(e.Writer, b[0], b[1])
 
 	// symbol table offset
 	//e.Write(addrOf(e.sz + 12))
@@ -108,8 +108,8 @@ func (e *Encoder) sub(il []*Instruction) {
 			if !ok {
 				log.Fatal("undefined symbol", i.Value)
 			}
-			msb, lsb := toBytes(index)
-			e.emit(byte(i.Op), msb, lsb)
+			b := toBytes(index)
+			e.emit(byte(i.Op), b[0], b[1])
 		case JPZ, JNZ, MVI:
 			v, err := strconv.ParseInt(i.Value, 0, 8)
 			if err != nil {

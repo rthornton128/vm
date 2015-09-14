@@ -25,7 +25,7 @@ func Parse(src []byte) (*File, []error) {
 }
 
 func newParser(src string) *Parser {
-	s := new(lex.BasicScanner)
+	s := new(lex.Scanner)
 	s.Init(src)
 	l := lex.NewLex(s)
 	l.Symbols = symbols

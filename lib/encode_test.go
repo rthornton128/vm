@@ -1,11 +1,6 @@
 package vm_test
 
-import (
-	"bytes"
-	"misc/vm/lib"
-	"testing"
-)
-
+/*
 func TestEncodeMagicOnly(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
@@ -84,4 +79,4 @@ func TestRegisters(t *testing.T) {
 	if err := e.Encode([]byte("$asdf")); err == nil {
 		t.Fatal("expected error, got none")
 	}
-}
+}*/
