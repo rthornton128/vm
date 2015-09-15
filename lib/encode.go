@@ -2,7 +2,6 @@ package vm
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -10,14 +9,14 @@ import (
 
 type Encoder struct {
 	io.Writer
-	buf  *bytes.Buffer
-	ob   Object
-	stab map[string]uint16
+	buf *bytes.Buffer
+	ob  Object
+	//stab map[string]uint16
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{Writer: w, buf: new(bytes.Buffer),
-		stab: make(map[string]uint16)}
+	return &Encoder{Writer: w, buf: new(bytes.Buffer)} //,
+	//		stab: make(map[string]uint16)}
 }
 
 func (e *Encoder) Encode(src []byte) error {
@@ -65,18 +64,21 @@ func (e *Encoder) sections(secs []Section) {
 		switch x := s.(type) {
 		case *TextSection:
 			for k, v := range x.m {
-				e.stab[k] = uint16(e.buf.Len())
-				if k == "main" {
-					defer e.sub(v)
-					continue
-				}
+				//e.stab[k] = uint16(e.buf.Len())
+				addr := uint16(e.buf.Len())
+				e.ob.SymTab = append(e.ob.SymTab,
+					Symbol{Name: k, Addr: addr})
+				e.ob.RelocTab = append(e.ob.RelocTab,
+					Relocate{Offset: addr, SymIndex: byte(len(e.ob.SymTab))})
 				e.sub(v)
 			}
+			e.ob.SecTab = append(e.ob.SecTab,
+				OSection{Name: "text", Data: e.buf.Bytes()})
 		default:
 			log.Fatal("unexpected section type")
 		}
 	}
-	fmt.Println(e.stab)
+	//fmt.Println(e.stab)
 	return
 }
 
@@ -84,6 +86,7 @@ func (e *Encoder) sub(il []*Instruction) {
 	for _, i := range il {
 		switch i.Op {
 		case JMP, CALL:
+			// TODO replace
 			index, ok := e.stab[i.Value]
 			if !ok {
 				log.Fatal("undefined symbol", i.Value)
