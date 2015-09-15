@@ -2,6 +2,7 @@ package vm
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -21,6 +22,7 @@ func NewEncoder(w io.Writer) *Encoder {
 
 func (e *Encoder) Encode(src []byte) error {
 	f, errs := Parse(src)
+	// TODO need error list satisfying error interface
 	if len(errs) > 0 {
 		for _, err := range errs {
 			log.Println(err)
@@ -30,7 +32,8 @@ func (e *Encoder) Encode(src []byte) error {
 
 	// generate text & data bytes
 	if err := e.file(f); err != nil {
-		log.Fatal(err)
+		//log.Fatal(err)
+		return err
 	}
 
 	_, err := e.Write(e.ob.Bytes())
@@ -42,7 +45,7 @@ func (e *Encoder) Encode(src []byte) error {
 }
 
 func (e *Encoder) emit(b ...byte) {
-	n, err := e.Write(b)
+	n, err := e.buf.Write(b)
 	if n != len(b) {
 		log.Println("failed to write all bytes")
 	}
@@ -70,6 +73,7 @@ func (e *Encoder) sections(secs []Section) {
 					Symbol{Name: k, Addr: addr})
 				e.ob.RelocTab = append(e.ob.RelocTab,
 					Relocate{Offset: addr, SymIndex: byte(len(e.ob.SymTab))})
+				fmt.Println("new symbol:", k, addr)
 				e.sub(v)
 			}
 			e.ob.SecTab = append(e.ob.SecTab,

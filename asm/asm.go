@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -32,16 +31,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	f, err = os.Create(flag.Arg(0) + ".vm") // TODO fix extention handling
+	f, err = os.Create(flag.Arg(0) + ".o") // TODO fix extention handling
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
 
-	fmt.Println(buf.Bytes())
+	//fmt.Println(buf.Bytes())
 	f.Write(buf.Bytes())
-	// linking
-	//if err := vm.Link(buf.Bytes(), f); err != nil {
-	///log.Fatal(err)
-	//}
 }
