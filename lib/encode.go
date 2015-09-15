@@ -85,15 +85,15 @@ func (e *Encoder) sections(secs []Section) {
 func (e *Encoder) sub(il []*Instruction) {
 	for _, i := range il {
 		switch i.Op {
-		case JMP, CALL:
+		case JMP, JPZ, JNZ, CALL:
 			// TODO replace
-			index, ok := e.stab[i.Value]
+			s, ok := e.ob.SymTab.Lookup(i.Value) //e.stab[i.Value]
 			if !ok {
-				log.Fatal("undefined symbol", i.Value)
+				log.Fatal("undeclared symbol", i.Value)
 			}
-			b := toBytes(index)
+			b := toBytes(s.Addr)
 			e.emit(byte(i.Op), b[0], b[1])
-		case JPZ, JNZ, MVI:
+		case MVI:
 			v, err := strconv.ParseInt(i.Value, 0, 8)
 			if err != nil {
 				log.Fatal(err)

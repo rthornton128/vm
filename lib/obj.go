@@ -225,6 +225,15 @@ func (st SymbolTable) Bytes() []byte {
 	return b
 }
 
+func (st SymbolTable) Lookup(name string) (Symbol, bool) {
+	for _, s := range st {
+		if name == s.Name {
+			return s, true
+		}
+	}
+	return Symbol{}, false
+}
+
 func (st SymbolTable) Size() uint16 {
 	var sz uint16
 	for _, s := range st {
