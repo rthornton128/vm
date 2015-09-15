@@ -25,7 +25,7 @@ func Parse(src []byte) (*File, []error) {
 }
 
 func newParser(src string) *Parser {
-	s := new(lex.Scanner)
+	s := new(lex.BasicScanner)
 	s.Init(src)
 	l := lex.NewLex(s)
 	l.Symbols = symbols
@@ -83,7 +83,7 @@ func (p *Parser) literal() string {
 
 func (p *Parser) next() {
 	p.lit, p.tok, p.pos = p.lexer.Lex()
-	fmt.Println("next:", p.lit, p.tok, p.pos)
+	//fmt.Println("next:", p.lit, p.tok, p.pos)
 }
 
 func (p *Parser) register() Register {
