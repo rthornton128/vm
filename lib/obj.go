@@ -3,19 +3,33 @@ package vm
 import (
 	"bytes"
 	"errors"
+	"fmt"
 )
 
 var MagicNumber = []byte{0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf}
 
 type Object struct {
 	Entry    uint16
-	SecTab   SectionTable
-	RelocTab RelocateTable
-	SymTab   SymbolTable
+	SecTab   *SectionTable
+	RelocTab *RelocateTable
+	SymTab   *SymbolTable
 }
 
-func ScanObject(b []byte) (Object, error) {
-	var o Object
+func NewObject() *Object {
+	sec := make(SectionTable, 0)
+	rel := make(RelocateTable, 0)
+	sym := make(SymbolTable, 0)
+
+	return &Object{
+		SecTab:   &sec,
+		RelocTab: &rel,
+		SymTab:   &sym,
+	}
+}
+
+func ScanObject(b []byte) (*Object, error) {
+	//var o Object
+	o := NewObject()
 
 	// TODO Not enough...see below
 	if len(b) < 12 {
@@ -45,7 +59,7 @@ func ScanObject(b []byte) (Object, error) {
 	return o, nil
 }
 
-func (o Object) Bytes() []byte {
+func (o *Object) Bytes() []byte {
 	b := make([]byte, 0)
 
 	// magic #
@@ -69,9 +83,20 @@ func (o Object) Bytes() []byte {
 	return b
 }
 
-func (o Object) Merge(objs ...Object) {
-	for _ = range objs {
+func (o *Object) Merge(objs ...*Object) error {
+	for _, ob := range objs {
+		if err := o.RelocTab.Merge(ob.RelocTab); err != nil {
+			return err
+		}
+		if err := o.SymTab.Merge(ob.SymTab); err != nil {
+			return err
+		}
+		// merge sections last so relocations can happen
+		if err := o.SecTab.Merge(ob.SecTab); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Section is a segment of data that may represent different parts of the
@@ -104,33 +129,77 @@ func (os OSection) Bytes() []byte {
 	return b
 }
 
+func (os OSection) Merge(other OSection) error {
+	if os.Name != other.Name {
+		return fmt.Errorf("merge: sections do not match: %s vs %s",
+			os.Name, other.Name)
+	}
+	// TODO temporary stub, needs to do relocations and lookups
+	os.Data = append(os.Data, other.Data...)
+	return nil
+}
+
 func (os OSection) Size() uint16 {
 	return uint16(len(os.Name) + len(os.Data) + 3)
 }
 
 type SectionTable []OSection
 
-func ScanSectionTable(b []byte, n uint16) SectionTable {
+func ScanSectionTable(b []byte, n uint16) *SectionTable {
 	st := make(SectionTable, 0)
 	for i := uint16(0); i < n; {
 		s := ScanSection(b[i:])
 		st = append(st, s)
 		i += s.Size()
 	}
-	return st
+	return &st
 }
 
-func (st SectionTable) Bytes() []byte {
+func (st *SectionTable) Add(os OSection) error {
+	for _, sec := range *st {
+		if sec.Name == os.Name {
+			return fmt.Errorf("duplicate section not allowed: %s", sec.Name)
+		}
+	}
+	*st = append(*st, os)
+	fmt.Println(*st)
+	return nil
+}
+
+func (st *SectionTable) Bytes() []byte {
 	b := make([]byte, 0)
-	for _, s := range st {
+	for _, s := range *st {
 		b = append(b, s.Bytes()...)
 	}
 	return b
 }
 
-func (st SectionTable) Size() uint16 {
+func (st *SectionTable) Merge(other *SectionTable) error {
+	for _, sec := range *other {
+		fmt.Println("sect add:", sec)
+		if err := st.MergeSection(sec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (st *SectionTable) MergeSection(other OSection) error {
+	for _, sec := range *st {
+		fmt.Println("sect merge:", sec)
+		if sec.Name == other.Name {
+			if err := sec.Merge(other); err != nil {
+				return err
+			}
+		}
+	}
+	*st = append(*st, other)
+	return nil
+}
+
+func (st *SectionTable) Size() uint16 {
 	var sz uint16
-	for _, s := range st {
+	for _, s := range *st {
 		sz += s.Size()
 	}
 	return sz
@@ -157,24 +226,46 @@ func (r Relocate) Bytes() []byte {
 // RelocateTable is a list of relocatable objects
 type RelocateTable []Relocate
 
-func ScanRelocateTable(b []byte, n uint16) RelocateTable {
+func ScanRelocateTable(b []byte, n uint16) *RelocateTable {
 	rt := make(RelocateTable, 0)
 	for i := uint16(0); i < n; i += 3 {
 		rt = append(rt, ScanRelocate(b[i:]))
 	}
-	return rt
+	return &rt
 }
 
-func (rt RelocateTable) Bytes() []byte {
+func (rt *RelocateTable) Add(r Relocate) error {
+	for _, reloc := range *rt {
+		if reloc.SymIndex == r.SymIndex {
+			return fmt.Errorf("duplicate symbolic reference: %d", r.SymIndex)
+		}
+	}
+	*rt = append(*rt, r)
+	fmt.Println(*rt)
+	return nil
+}
+
+func (rt *RelocateTable) Bytes() []byte {
 	b := make([]byte, 0)
-	for _, r := range rt {
+	for _, r := range *rt {
 		b = append(b, r.Bytes()...)
 	}
 	return b
 }
 
-func (rt RelocateTable) Size() uint16 {
-	return uint16(len(rt) * 3)
+func (rt *RelocateTable) Merge(other *RelocateTable) error {
+	for _, reloc := range *other {
+		fmt.Println("rt add:", *other)
+		if err := rt.Add(reloc); err != nil {
+			return err
+		}
+	}
+	fmt.Println(*rt)
+	return nil
+}
+
+func (rt *RelocateTable) Size() uint16 {
+	return uint16(len(*rt) * 3)
 }
 
 // Symbol represent an addressable location associated with a label.
@@ -207,26 +298,46 @@ func (s Symbol) Size() uint16 {
 // SymbolTable is a list of all Symbols found in the object/program
 type SymbolTable []Symbol
 
-func ScanSymbolTable(b []byte, n uint16) SymbolTable {
+func ScanSymbolTable(b []byte, n uint16) *SymbolTable {
 	st := make(SymbolTable, 0)
 	for i := uint16(0); i < n; {
 		s := ScanSymbol(b[i:])
 		st = append(st, s)
 		i += s.Size()
 	}
-	return st
+	return &st
 }
 
-func (st SymbolTable) Bytes() []byte {
+func (st *SymbolTable) Add(s Symbol) error {
+	for _, sym := range *st {
+		if sym.Name == s.Name {
+			return fmt.Errorf("duplicate name: %s", sym.Name)
+		}
+	}
+	*st = append(*st, s)
+	return nil
+}
+
+func (st *SymbolTable) Bytes() []byte {
 	b := make([]byte, 0)
-	for _, s := range st {
+	for _, s := range *st {
 		b = append(b, s.Bytes()...)
 	}
 	return b
 }
 
-func (st SymbolTable) Lookup(name string) (Symbol, bool) {
-	for _, s := range st {
+func (st *SymbolTable) Merge(other *SymbolTable) error {
+	for _, sym := range *other {
+		fmt.Println("st add:", *other)
+		if err := st.Add(sym); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (st *SymbolTable) Lookup(name string) (Symbol, bool) {
+	for _, s := range *st {
 		if name == s.Name {
 			return s, true
 		}
@@ -234,9 +345,9 @@ func (st SymbolTable) Lookup(name string) (Symbol, bool) {
 	return Symbol{}, false
 }
 
-func (st SymbolTable) Size() uint16 {
+func (st *SymbolTable) Size() uint16 {
 	var sz uint16
-	for _, s := range st {
+	for _, s := range *st {
 		sz += s.Size()
 	}
 	return sz
