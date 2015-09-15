@@ -1,22 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 
 	vm "github.com/rthornton128/vm/lib"
 )
-
-type instruction struct {
-	i    vm.Instruction
-	sz   int
-	rega vm.Register
-	regb vm.Register
-	imm  byte
-	addr uint16
-}
 
 type CPU struct {
 	ar   uint16 // address register
@@ -24,29 +16,43 @@ type CPU struct {
 	ir   byte   // instruction register
 	pc   uint16 // program counter
 	sp   uint16 // stack pointer
-	ac   byte   // accumulator
-	b    byte   // register b
-	c    byte   // register c
+	tr   byte
+	ac   byte // accumulator
+	b    byte // register b
+	c    byte // register c
 	zero bool
 	mem  []byte
 	end  uint16
 }
 
-func newCPU(mem []byte) *CPU {
-	return &CPU{}
+func (c *CPU) init(ep uint16, prog []byte) {
+	c.ac = 0 // redundant but extra assurrance
+	c.pc = ep
+	c.sp = uint16(len(prog))     // TODO hack, available in object
+	c.mem = make([]byte, 0xffff) // 65536 bytes
+	c.zero = true
+
+	// copy program in
+	copy(c.mem, prog)
+
+	// set return address on stack to invalid address
+	c.mem[c.sp] = 0xff   // lsb
+	c.mem[c.sp+1] = 0xff // msb
+	c.sp += 2
 }
 
 func (c *CPU) decode() {
 	switch vm.Opcode(c.ir & 0x3f) {
 	case vm.NOP:
 	case vm.CALL:
-		c.ar = c.sp
-		c.mem[c.ar] = uint8(c.pc >> 8)
-		c.sp++
-		c.ar = c.sp
-		c.mem[c.ar] = uint8(c.pc)
-		c.sp++
-		fallthrough
+		// load address to jump to
+		c.ar = c.pc
+		c.pc++
+		c.dr = c.mem[c.ar]
+		c.ar = c.pc
+		c.pc++
+		c.tr = c.dr
+		c.dr = c.mem[c.ar]
 	case vm.JMP, vm.JPZ, vm.JNZ:
 		c.dr = c.mem[c.pc]
 		c.ar = uint16(c.dr) << 8
@@ -55,6 +61,11 @@ func (c *CPU) decode() {
 		c.ar |= uint16(c.dr)
 		c.pc++
 	case vm.RET:
+		c.sp--
+		c.ar = c.sp
+		c.dr = c.mem[c.ar]
+		c.sp--
+		c.ar = c.sp
 	case vm.POP:
 		c.sp--
 		c.ar = c.sp
@@ -94,7 +105,18 @@ func (c *CPU) exec() {
 			c.pc = c.ar
 		}
 	case vm.CALL:
+		c.ar = c.sp
+		c.sp++
+		c.mem[c.ar] = uint8(c.pc) // >> 8)
+		c.ar = c.sp
+		c.sp++
+		c.mem[c.ar] = uint8(c.pc >> 8)
+		c.pc = uint16(c.tr) << 8
+		c.pc |= uint16(c.dr)
 	case vm.RET:
+		c.pc = uint16(c.dr) << 8
+		c.dr = c.mem[c.ar]
+		c.pc |= uint16(c.dr)
 	case vm.MOV:
 		c.ac = c.dr
 	case vm.MVR:
@@ -137,13 +159,21 @@ func (c *CPU) exec() {
 
 func (c *CPU) fetch() {
 	c.ar = c.pc
-	c.dr = c.mem[c.ar] // fetch instruction into data register
 	c.pc++
+	c.dr = c.mem[c.ar] // fetch instruction into data register
 	c.ir = c.dr
+	//fmt.Println("c.ar:", c.ar, "c.ir:", c.ir)
 }
 
 func (c *CPU) run() {
-	c.fetch()
+	for {
+		c.fetch()
+		c.decode()
+		c.exec()
+		if c.pc == 0xffff {
+			break
+		}
+	}
 }
 
 func main() {
@@ -155,37 +185,19 @@ func main() {
 	}
 	defer f.Close()
 
-	magic := make([]byte, 8)
-
-	// verify file is a valid virtual machine object
-	n, err := f.Read(magic)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if n != 8 {
-		log.Fatal("failed to read 8 bytes, not vm object file")
-	}
-	if !bytes.Equal([]byte{0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf}, magic) {
-		log.Fatal("not a vm object file")
-	}
-
-	// load entry point
-	ep := make([]byte, 2)
-	n, err = f.Read(ep)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if n != 2 {
-		log.Fatal("failed to read entry point")
-	}
-
-	// load program into memory
-	mem := make([]byte, 0xffff) // 65536 byte array
-	_, err = f.Read(mem)
+	b, err := ioutil.ReadAll(f)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	cpu := newCPU(mem)
+	o, err := vm.ScanObject(b)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// TODO entry point hacked, need proper copy of sections
+	cpu := new(CPU)
+	cpu.init(o.Entry, o.SecTab.Bytes()[7:])
 	cpu.run()
+	fmt.Println("exit with result:", cpu.ac)
 }

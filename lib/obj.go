@@ -96,6 +96,13 @@ func (o *Object) Merge(objs ...*Object) error {
 			return err
 		}
 	}
+
+	// TODO temporary hack
+	for _, s := range *o.SymTab {
+		if s.Name == "main" {
+			o.Entry = s.Addr
+		}
+	}
 	return nil
 }
 
