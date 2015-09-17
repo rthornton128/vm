@@ -16,8 +16,8 @@ type Encoder struct {
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{Writer: w, buf: new(bytes.Buffer), ob: NewObject()} //,
-	//		stab: make(map[string]uint16)}
+	//o, _ := ScanObject([]byte{})
+	return &Encoder{Writer: w, buf: new(bytes.Buffer), ob: NewObject()}
 }
 
 func (e *Encoder) Encode(src []byte) error {
@@ -69,13 +69,12 @@ func (e *Encoder) sections(secs []Section) {
 			for k, v := range x.m {
 				//e.stab[k] = uint16(e.buf.Len())
 				addr := uint16(e.buf.Len())
-				e.ob.SymTab.Add(Symbol{Name: k, Addr: addr})
-				e.ob.RelocTab.Add(
-					Relocate{Offset: addr, SymIndex: byte(len(*e.ob.SymTab))})
+				e.ob.AddSymbol(k, addr)
+				e.ob.RelocTab.Add(byte(len(e.ob.SymTab)), addr)
 				fmt.Println("new symbol:", k, addr)
 				e.sub(v)
 			}
-			e.ob.SecTab.Add(OSection{Name: "text", Data: e.buf.Bytes()})
+			e.ob.setSection(TEXT, e.buf.Bytes())
 		default:
 			log.Fatal("unexpected section type")
 		}

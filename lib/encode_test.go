@@ -1,13 +1,6 @@
 package vm_test
 
-import (
-	"bytes"
-	"log"
-	"testing"
-
-	vm "github.com/rthornton128/vm/lib"
-)
-
+/*
 func TestEncodeMinimal(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
@@ -27,7 +20,6 @@ func TestEncodeMinimal(t *testing.T) {
 	}
 }
 
-/*
 func TestLiteral(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
