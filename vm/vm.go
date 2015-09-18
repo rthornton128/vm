@@ -28,7 +28,7 @@ type CPU struct {
 func (c *CPU) init(ep uint16, prog []byte) {
 	c.ac = 0 // redundant but extra assurrance
 	c.pc = ep
-	c.sp = uint16(len(prog))     // TODO hack, available in object
+	c.sp = uint16(len(prog))
 	c.mem = make([]byte, 0xffff) // 65536 bytes
 	c.zero = true
 
@@ -197,7 +197,7 @@ func main() {
 
 	// TODO entry point hacked, need proper copy of sections
 	cpu := new(CPU)
-	cpu.init(o.Entry, o.SecTab.Bytes()[7:])
+	cpu.init(o.Entry, o.SecTab[vm.TEXT])
 	cpu.run()
 	fmt.Println("exit with result:", cpu.ac)
 }
