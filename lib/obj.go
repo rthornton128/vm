@@ -24,13 +24,13 @@ type Object struct {
 func NewObject() *Object {
 	return &Object{
 		SecTab:   make(SectionTable, section_max),
-		RelocTab: make(RelocateTable),
+		RelocTab: make(RelocateTable, 0),
 		SymTab:   make(SymbolTable, 0),
 	}
 }
 
 func ScanObject(b []byte) (*Object, error) {
-	o := new(Object)
+	o := NewObject()
 
 	// TODO Not enough...see below
 	if len(b) < 12 {
@@ -46,11 +46,11 @@ func ScanObject(b []byte) (*Object, error) {
 	o.RelAddr = toAddress(b[10:12])
 	o.RelSize = toAddress(b[12:14])
 
-	o.SymAddr = toAddress(b[10:12])
-	o.SymSize = toAddress(b[12:14])
+	o.SymAddr = toAddress(b[14:16])
+	o.SymSize = toAddress(b[16:18])
 
-	o.SecAddr = toAddress(b[10:12])
-	o.SecSize = toAddress(b[12:14])
+	o.SecAddr = toAddress(b[18:20])
+	o.SecSize = toAddress(b[20:22])
 
 	o.ScanRelocateTable(b[o.RelAddr : o.RelAddr+o.RelSize])
 	o.ScanSymbolTable(b[o.SymAddr : o.SymAddr+o.SymSize])
@@ -68,7 +68,7 @@ func (o *Object) Bytes() []byte {
 	// entry point
 	b = append(b, toBytes(o.Entry)...)
 
-	i := uint16(len(MagicNumber)) + 2
+	i := uint16(len(MagicNumber)) + 14
 
 	// relocation table size and addr
 	b = append(b, toBytes(i)...)
@@ -95,16 +95,16 @@ func (o *Object) Bytes() []byte {
 
 func (o *Object) Merge(objs ...*Object) error {
 	for _, ob := range objs {
-		if err := o.RelocTab.Merge(ob.RelocTab); err != nil {
+		if err := o.MergeRelocates(ob.RelocTab); err != nil {
 			return err
 		}
-		/*if err := o.SymTab.Merge(ob.SymTab); err != nil {
+		if err := o.MergeSymbols(ob.SymTab); err != nil {
 			return err
-		}*/
+		}
 		// merge sections last so relocations can happen
-		/*if err := o.SecTab.Merge(ob.SecTab); err != nil {
+		if err := o.MergeSections(ob.SecTab); err != nil {
 			return err
-		}*/
+		}
 	}
 
 	// TODO temporary hack
@@ -149,6 +149,7 @@ func (o *Object) ScanSectionTable(b []byte) error {
 
 	// it then contains a table with format: type, address, length
 	for i, j := 0, 1; i < nsec; i++ {
+		//fmt.Println(i, j)
 		t := b[j]
 		if cap(o.SecTab[t]) > 0 {
 			return fmt.Errorf("duplicate section:", sections[t])
@@ -158,7 +159,6 @@ func (o *Object) ScanSectionTable(b []byte) error {
 
 		o.SecTab[t] = make([]byte, ln)
 		copy(o.SecTab[t], b[addr:addr+ln])
-		//fmt.Println(t, addr, ln, b[addr:addr+ln])
 		j += 5
 	}
 	return nil
@@ -182,36 +182,38 @@ func (o *Object) setSection(sec SecType, data []byte) error {
 
 func (st SectionTable) Bytes() []byte {
 	sz := 1
+	// TODO likely a better way
 	var n byte
 	for i := range st {
 		if cap(st[i]) > 0 {
 			n++
+			sz += 5 + len(st[i])
 		}
-		sz += 5 + len(st[i])
 	}
 	b := make([]byte, sz)
 	b[0] = byte(n)
 	i, j := 1, int(1+(n*5))
 	for t, sec := range st {
-		b[i] = byte(t)
-		copy(b[i+1:], toBytes(uint16(j)))
-		copy(b[i+3:], toBytes(uint16(len(sec))))
-		copy(b[j:], sec)
-		i, j = i+5, j+len(sec)
-		//fmt.Println(b)
+		if cap(st[t]) > 0 {
+			b[i] = byte(t)
+			copy(b[i+1:], toBytes(uint16(j)))
+			copy(b[i+3:], toBytes(uint16(len(sec))))
+			copy(b[j:], sec)
+			i, j = i+5, j+len(sec)
+		}
 	}
 	return b
 }
 
-func (st SectionTable) Merge(other SectionTable) error {
+func (o *Object) MergeSections(other SectionTable) error {
 	// TODO should it return error? will one occur?
 	for sec, data := range other {
-		if cap(st[sec]) > 0 {
+		if cap(o.SecTab[sec]) > 0 {
 			// TODO intentionally wrong; needs relocations and symbol table update
-			st[sec] = append(st[sec], data...)
+			o.SecTab[sec] = append(o.SecTab[sec], data...)
 		} else {
-			st[sec] = make([]byte, len(data))
-			copy(st[sec], data)
+			o.SecTab[sec] = make([]byte, len(data))
+			copy(o.SecTab[sec], data)
 		}
 	}
 	return nil
@@ -232,41 +234,47 @@ func (st SectionTable) Size() uint16 {
 // object is used by the linker to adjust the location of symbols in
 // memory
 // RelocateTable is a list of relocatable objects
-type RelocateTable map[byte]uint16 //[]Relocate
+type RelocateTable []RelocAddr
+
+type RelocAddr struct {
+	index  byte
+	offset uint16
+}
 
 func (o *Object) ScanRelocateTable(b []byte) {
-	rt := make(RelocateTable)
-	for i := uint16(0); i < uint16(len(b)); i += 3 {
-		rt[b[0]] = toAddress(b[1:3])
+	for i := 0; i < len(b); i += 3 {
+		o.AddRelocate(b[0], toAddress(b[1:3]))
+		//o.RelocTab = append(o.RelocTab,
+		//RelocAddr{index: b[0], offset: toAddress(b[1:3])})
 	}
 	return
 }
 
-func (rt RelocateTable) Add(index byte, offset uint16) error {
-	if _, ok := rt[index]; ok {
-		return fmt.Errorf("duplicate symbolic reference: %d", index)
+func (o *Object) AddRelocate(index byte, offset uint16) error {
+	for _, r := range o.RelocTab {
+		if r.index == index {
+			return fmt.Errorf("duplicate symbolic reference: %d", index)
+		}
 	}
-	rt[index] = offset
+	o.RelocTab = append(o.RelocTab, RelocAddr{index, offset})
 	return nil
 }
 
 func (rt RelocateTable) Bytes() []byte {
 	b := make([]byte, 0)
-	for k, v := range rt {
-		addr := toBytes(v)
-		b = append(b, k, addr[0], addr[1])
+	for _, r := range rt {
+		b = append(b, r.index)
+		b = append(b, toBytes(r.offset)...)
 	}
 	return b
 }
 
-func (rt RelocateTable) Merge(other RelocateTable) error {
-	for k, v := range other {
-		fmt.Println("rt add:", other)
-		if err := rt.Add(k, v); err != nil {
+func (o *Object) MergeRelocates(other RelocateTable) error {
+	for _, r := range other {
+		if err := o.AddRelocate(r.index, r.offset); err != nil {
 			return err
 		}
 	}
-	fmt.Println(rt)
 	return nil
 }
 
@@ -331,17 +339,24 @@ func (st SymbolTable) Bytes() []byte {
 	return b
 }
 
-/*
-func (o *Object) MergeSymbolTable(other SymbolTable) error {
+func (o *Object) MergeSymbols(other SymbolTable) error {
 	for _, sym := range other {
-		fmt.Println("st add:", other)
-		if err := st.Add(sym); err != nil {
+		if err := o.AddSymbol(sym.Name, sym.Addr); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-*/
+
+func (o *Object) LookupSymbolIndex(name string) byte {
+	for i, s := range o.SymTab {
+		if name == s.Name {
+			return byte(i)
+		}
+	}
+	return 255
+}
+
 func (st SymbolTable) Lookup(name string) (Symbol, bool) {
 	for _, s := range st {
 		if name == s.Name {

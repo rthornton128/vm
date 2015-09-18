@@ -67,10 +67,9 @@ func (e *Encoder) sections(secs []Section) {
 		switch x := s.(type) {
 		case *TextSection:
 			for k, v := range x.m {
-				//e.stab[k] = uint16(e.buf.Len())
 				addr := uint16(e.buf.Len())
 				e.ob.AddSymbol(k, addr)
-				e.ob.RelocTab.Add(byte(len(e.ob.SymTab)), addr)
+				e.ob.AddRelocate(e.ob.LookupSymbolIndex(k), addr)
 				fmt.Println("new symbol:", k, addr)
 				e.sub(v)
 			}

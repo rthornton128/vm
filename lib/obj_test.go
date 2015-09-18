@@ -7,17 +7,13 @@ import (
 	vm "github.com/rthornton128/vm/lib"
 )
 
-/*
 func TestObject(t *testing.T) {
 	o := &vm.Object{
 		Entry: 0x03,
 		SecTab: vm.SectionTable{
-			vm.OSection{
-				Name: "text",
-				Data: []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa},
-			},
+			vm.TEXT: []byte{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa},
+			vm.DATA: make([]byte, 0, 0),
 		},
-		RelocTab: vm.RelocateTable{0x2: 0x6},
 		SymTab: vm.SymbolTable{
 			vm.Symbol{
 				Name: "fn",
@@ -29,18 +25,24 @@ func TestObject(t *testing.T) {
 			},
 		},
 	}
+	o.AddRelocate(0x2, 0x6)
+
 	b := o.Bytes()
 	expect := []byte{
 		0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf, // magic #
 		0x0, 0x3, // entry pt
-		0x0, 0x3, // reloc len
-		0x2, 0x0, 0x6, // reloc
-		0x0, 0xc, // symtab len
+		0x0, 0x16, // reladdr
+		0x0, 0x3, // relsize
+		0x0, 0x19, // symaddr
+		0x0, 0xc, // symsize
+		0x0, 0x25, // secaddr
+		0x0, 0xf, // secsize
+		0x2, 0x0, 0x6, // reloc1
 		0x0, 0x0, 0x2, 'f', 'n', // symbol 1
 		0x0, 0x3, 0x4, 'm', 'a', 'i', 'n', // symbol 2
-		0x0, 0x11, // section len
-		0x4, 't', 'e', 'x', 't',
-		0x0, 0xa, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa,
+		0x1,                     // 1 section
+		0x0, 0x0, 0x6, 0x0, 0xa, // section text, len 11
+		0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, // text
 	}
 
 	if !bytes.Equal(b, expect) {
@@ -77,9 +79,8 @@ func TestObject(t *testing.T) {
 	if len(ob.SecTab) < 1 {
 		t.Fatal("failed to scan symbol table")
 	}
-	for i, s := range ob.SecTab {
-		if s.Name != (o.SecTab)[i].Name ||
-			!bytes.Equal(s.Data, (o.SecTab)[i].Data) {
+	for i := range ob.SecTab {
+		if !bytes.Equal(ob.SecTab[i], o.SecTab[i]) {
 			t.Log("expected:", ob.SecTab, "got:", o.SecTab)
 			t.FailNow()
 		}
@@ -98,43 +99,47 @@ func TestObject(t *testing.T) {
 }
 
 func TestRelocateTable(t *testing.T) {
-	rt := vm.RelocateTable{
-		0x42: 0xabcd,
-		0xff: 0x1234,
-	}
-	b := rt.Bytes()
-	//expect := []byte{0x42, 0xab, 0xcd, 0xff, 0x12, 0x34}
+	o := vm.NewObject()
+	o.AddRelocate(0x42, 0xabcd)
+	o.AddRelocate(0xff, 0x1234)
+	b := o.RelocTab.Bytes()
+	expect := []byte{0x42, 0xab, 0xcd, 0xff, 0x12, 0x34}
 
 	if !bytes.Equal(b, expect) {
 		t.Log("expected:", expect, "got:", b)
 		t.FailNow()
 	}
 
-	rel := vm.ScanRelocateTable(b, uint16(len(b)))
-	for i, r := range rel {
-		if r != rt[i] {
-			t.Log("expected:", rt, "got:", rel)
+	o2 := vm.NewObject()
+	o2.ScanRelocateTable(b)
+	for i, r := range o2.RelocTab {
+		if r != o.RelocTab[i] {
+			t.Log("expected:", r, "got:", o.RelocTab[i])
 			t.FailNow()
 		}
 	}
 }
 
 func TestRelocateTableMerge(t *testing.T) {
-	rt1 := vm.RelocateTable{0x0: 0x0000, 0x1: 0x0001}
-	rt2 := vm.RelocateTable{0x2: 0x0002, 0x3: 0x0003}
+	o1 := vm.NewObject()
+	o2 := vm.NewObject()
+	o1.AddRelocate(0x0, 0x0000)
+	o1.AddRelocate(0x1, 0x0001)
+	o2.AddRelocate(0x2, 0x0002)
+	o2.AddRelocate(0x3, 0x0003)
 	expect := []byte{0x6, 0x0, 0x0, 0x0, 0x1, 0x0, 0x1,
 		0x2, 0x0, 0x2, 0x3, 0x0, 0x3}
 
-	err := rt1.Merge(rt2)
+	err := o1.Merge(o2)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Equal(rt1.Bytes(), expect) {
-		t.Fatal("expected:", expect, "got:", rt1.Bytes())
+	if bytes.Equal(o1.RelocTab.Bytes(), expect) {
+		t.Fatal("expected:", expect, "got:", o1.RelocTab.Bytes())
 	}
 }
-*/
+
 func TestSectionTable(t *testing.T) {
 	st := vm.SectionTable{
 		vm.TEXT: []byte{0x1, 0x2, 0x3, 0x4, 0x5},
