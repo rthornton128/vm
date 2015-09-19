@@ -33,8 +33,7 @@ func NewObject() *Object {
 func ScanObject(b []byte) (*Object, error) {
 	o := NewObject()
 
-	// TODO Not enough...see below
-	if len(b) < 12 {
+	if len(b) < 21 {
 		return o, errors.New("not enough bytes")
 	}
 
