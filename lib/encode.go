@@ -68,7 +68,7 @@ func (e *Encoder) sections(secs []Section) {
 		case *TextSection:
 			for k, v := range x.m {
 				addr := uint16(e.buf.Len())
-				e.ob.AddSymbol(k, addr)
+				e.ob.AddSymbol(k, TEXT, addr)
 				e.ob.AddRelocate(e.ob.LookupSymbolIndex(k), addr)
 				fmt.Println("new symbol:", k, addr)
 				e.sub(v)
@@ -91,7 +91,7 @@ func (e *Encoder) sub(il []*Instruction) {
 			if !ok {
 				log.Fatal("undeclared symbol", i.Value)
 			}
-			b := toBytes(s.Addr)
+			b := toBytes(s.Address())
 			e.emit(byte(i.Op), b[0], b[1])
 		case MVI:
 			v, err := strconv.ParseInt(i.Value, 0, 8)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// TODO use shorter magic number
 var MagicNumber = []byte{0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xf}
 
 type Object struct {
@@ -95,24 +96,24 @@ func (o *Object) Bytes() []byte {
 
 func (o *Object) Merge(objs ...*Object) error {
 	for _, ob := range objs {
+		if err := o.MergeSections(ob); err != nil {
+			return err
+		}
+
+		if err := o.MergeSymbols(ob); err != nil {
+			return err
+		}
+
 		if err := o.MergeRelocates(ob.RelocTab); err != nil {
 			return err
 		}
-		if err := o.MergeSymbols(ob.SymTab); err != nil {
-			return err
-		}
-		// merge sections last so relocations can happen
-		if err := o.MergeSections(ob.SecTab); err != nil {
-			return err
-		}
-	}
 
-	// TODO temporary hack
-	for _, s := range o.SymTab {
-		if s.Name == "main" {
-			o.Entry = s.Addr
+		if o.Entry == 0 && ob.Entry != 0 {
+			o.Entry = ob.Entry
 		}
 	}
+	o.doRelocations()
+
 	return nil
 }
 
@@ -205,12 +206,21 @@ func (st SectionTable) Bytes() []byte {
 	return b
 }
 
-func (o *Object) MergeSections(other SectionTable) error {
+func (o *Object) MergeSections(other *Object) error {
 	// TODO should it return error? will one occur?
-	for sec, data := range other {
+	for sec, data := range other.SecTab {
 		if cap(o.SecTab[sec]) > 0 {
-			// TODO intentionally wrong; needs relocations and symbol table update
+			addend := uint16(len(o.SecTab[sec]))
+			other.updateSymbols(SecType(sec), addend)
+			if SecType(sec) == TEXT {
+				other.updateRelocations(addend)
+				if other.Entry != 0 {
+					other.Entry += addend
+				}
+			}
+			//fmt.Println(sec, ":", o.SecTab[sec], "-", other.SecTab[sec])
 			o.SecTab[sec] = append(o.SecTab[sec], data...)
+			//fmt.Println("after:", o.SecTab[sec])
 		} else {
 			o.SecTab[sec] = make([]byte, len(data))
 			copy(o.SecTab[sec], data)
@@ -243,21 +253,14 @@ type RelocAddr struct {
 
 func (o *Object) ScanRelocateTable(b []byte) {
 	for i := 0; i < len(b); i += 3 {
-		o.AddRelocate(b[0], toAddress(b[1:3]))
-		//o.RelocTab = append(o.RelocTab,
-		//RelocAddr{index: b[0], offset: toAddress(b[1:3])})
+		o.RelocTab = append(o.RelocTab,
+			RelocAddr{index: b[i], offset: toAddress(b[i+1 : i+3])})
 	}
 	return
 }
 
-func (o *Object) AddRelocate(index byte, offset uint16) error {
-	for _, r := range o.RelocTab {
-		if r.index == index {
-			return fmt.Errorf("duplicate symbolic reference: %d", index)
-		}
-	}
+func (o *Object) AddRelocate(index byte, offset uint16) {
 	o.RelocTab = append(o.RelocTab, RelocAddr{index, offset})
-	return nil
 }
 
 func (rt RelocateTable) Bytes() []byte {
@@ -269,11 +272,21 @@ func (rt RelocateTable) Bytes() []byte {
 	return b
 }
 
+func (o *Object) doRelocations() {
+	for i, sym := range o.SymTab {
+		for _, r := range o.RelocTab {
+			if r.index == byte(i) {
+				//fmt.Println("before:", o.SecTab[TEXT][r.offset:r.offset+2])
+				copy(o.SecTab[TEXT][r.offset:r.offset+2], toBytes(sym.addr))
+				//fmt.Println("after:", o.SecTab[TEXT][r.offset:r.offset+2])
+			}
+		}
+	}
+}
+
 func (o *Object) MergeRelocates(other RelocateTable) error {
 	for _, r := range other {
-		if err := o.AddRelocate(r.index, r.offset); err != nil {
-			return err
-		}
+		o.RelocTab = append(o.RelocTab, r)
 	}
 	return nil
 }
@@ -282,31 +295,54 @@ func (rt RelocateTable) Size() uint16 {
 	return uint16(len(rt) * 3)
 }
 
-// Symbol represent an addressable location associated with a label.
-// Function and variable names are examples
-type Symbol struct {
-	Name string
-	Addr uint16
-}
-
-func ScanSymbol(b []byte) Symbol {
-	sz := b[2]
-	return Symbol{
-		Addr: toAddress(b[:2]),
-		Name: string(b[3 : 3+sz]),
+func (o *Object) updateRelocations(addend uint16) {
+	for i, r := range o.RelocTab {
+		if o.SymTab[r.index].sec == TEXT {
+			o.RelocTab[i].offset += addend
+		}
 	}
 }
 
+func (o *Object) updateRelocationIndexes(from, to byte) {
+	for i, r := range o.RelocTab {
+		if r.index == from {
+			o.RelocTab[i].index = to
+		}
+	}
+}
+
+// Symbol represent an addressable location associated with a label.
+// Function and variable names are examples
+type Symbol struct {
+	name string
+	sec  SecType
+	addr uint16
+}
+
+func ScanSymbol(b []byte) Symbol {
+	//fmt.Println("scansym", len(b), ":", b)
+	sz := b[3]
+	return Symbol{
+		addr: toAddress(b[:2]),
+		sec:  SecType(b[2]),
+		name: string(b[4 : 4+sz]),
+	}
+}
+
+func (s Symbol) Address() uint16 {
+	return s.addr
+}
+
 func (s Symbol) Bytes() []byte {
-	b := toBytes(s.Addr)
-	b = append(b, uint8(len(s.Name)))
-	b = append(b, []byte(s.Name)...)
+	b := toBytes(s.addr)
+	b = append(b, byte(s.sec), byte(len(s.name)))
+	b = append(b, []byte(s.name)...)
 
 	return b
 }
 
 func (s Symbol) Size() uint16 {
-	return uint16(len(s.Name) + 3)
+	return uint16(len(s.name) + 4)
 }
 
 // SymbolTable is a list of all Symbols found in the object/program
@@ -321,14 +357,16 @@ func (o *Object) ScanSymbolTable(b []byte) {
 	return
 }
 
-func (o *Object) AddSymbol(name string, addr uint16) error {
+func (o *Object) AddSymbol(name string, sec SecType, addr uint16) (int, error) {
+	var i int
 	for _, sym := range o.SymTab {
-		if sym.Name == name {
-			return fmt.Errorf("duplicate name: %s", name)
+		if sym.name == name {
+			return 0, fmt.Errorf("duplicate name: %s", name)
 		}
+		i++
 	}
-	o.SymTab = append(o.SymTab, Symbol{Addr: addr, Name: name})
-	return nil
+	o.SymTab = append(o.SymTab, Symbol{addr: addr, sec: sec, name: name})
+	return i, nil
 }
 
 func (st SymbolTable) Bytes() []byte {
@@ -339,18 +377,20 @@ func (st SymbolTable) Bytes() []byte {
 	return b
 }
 
-func (o *Object) MergeSymbols(other SymbolTable) error {
-	for _, sym := range other {
-		if err := o.AddSymbol(sym.Name, sym.Addr); err != nil {
+func (o *Object) MergeSymbols(other *Object) error {
+	for i, sym := range other.SymTab {
+		x, err := o.AddSymbol(sym.name, sym.sec, sym.addr)
+		if err != nil {
 			return err
 		}
+		other.updateRelocationIndexes(byte(i), byte(x))
 	}
 	return nil
 }
 
 func (o *Object) LookupSymbolIndex(name string) byte {
 	for i, s := range o.SymTab {
-		if name == s.Name {
+		if name == s.name {
 			return byte(i)
 		}
 	}
@@ -359,7 +399,7 @@ func (o *Object) LookupSymbolIndex(name string) byte {
 
 func (st SymbolTable) Lookup(name string) (Symbol, bool) {
 	for _, s := range st {
-		if name == s.Name {
+		if name == s.name {
 			return s, true
 		}
 	}
@@ -372,4 +412,12 @@ func (st SymbolTable) Size() uint16 {
 		sz += s.Size()
 	}
 	return sz
+}
+
+func (o *Object) updateSymbols(sec SecType, addend uint16) {
+	for i, s := range o.SymTab {
+		if s.sec == sec {
+			o.SymTab[i].addr = s.addr + addend
+		}
+	}
 }

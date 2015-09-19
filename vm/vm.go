@@ -195,7 +195,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// TODO entry point hacked, need proper copy of sections
 	cpu := new(CPU)
 	cpu.init(o.Entry, o.SecTab[vm.TEXT])
 	cpu.run()
