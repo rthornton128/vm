@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -162,7 +161,7 @@ func (c *CPU) fetch() {
 	c.pc++
 	c.dr = c.mem[c.ar] // fetch instruction into data register
 	c.ir = c.dr
-	fmt.Println("c.ar:", c.ar, "c.ir:", c.ir)
+	//fmt.Println("c.ar:", c.ar, "c.ir:", c.ir)
 }
 
 func (c *CPU) run() {
@@ -195,10 +194,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(p)
-	fmt.Println(p.SecTab[vm.TEXT])
+	//fmt.Println(p)
+	//fmt.Println(p.SecTab[vm.TEXT])
 	cpu := new(CPU)
 	cpu.init(p.Entry, p.SecTab[vm.TEXT])
 	cpu.run()
-	fmt.Println("exit with result:", cpu.ac)
+	log.Println("exit with result:", cpu.ac)
 }

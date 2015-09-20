@@ -145,25 +145,25 @@ func ScanProgram(b []byte) (*Program, error) {
 		return nil, fmt.Errorf("invalid virtual machine object")
 	}
 	b = b[len(MagicNumber):]
-	fmt.Println("bytes:", b)
+	//fmt.Println("bytes:", b)
 	p := Program{
 		Entry:   toAddress(b[:2]),
 		SecOff:  toAddress(b[2:4]),
 		SecSize: toAddress(b[4:6]),
 		SecTab:  make(SectionTable, section_max),
 	}
-	fmt.Println("entry:", p.Entry,
-		", secoff:", p.SecOff,
-		", secsize:", p.SecSize)
+	//fmt.Println("entry:", p.Entry,
+	//	", secoff:", p.SecOff,
+	//	", secsize:", p.SecSize)
 
 	nsec := uint16(b[p.SecOff])
 	j := p.SecOff + 1
 	for i := uint16(0); i < nsec; i++ {
 		secType := b[j]
-		secOff := toAddress(b[j+1 : j+3])
+		//secOff := toAddress(b[j+1 : j+3])
 		secLen := toAddress(b[j+3 : j+5])
 		j += 5
-		fmt.Println("type, addr, len", secType, secOff, secLen)
+		//fmt.Println("type, addr, len", secType, secOff, secLen)
 		p.SecTab[secType] = make([]byte, secLen)
 		copy(p.SecTab[secType], b[j:j+secLen])
 		j += secLen
@@ -173,7 +173,7 @@ func ScanProgram(b []byte) (*Program, error) {
 
 func (p *Program) Bytes() []byte {
 	b := make([]byte, uint16(len(MagicNumber))+7+p.SecTab.Size())
-	fmt.Println("bytes len:", len(b))
+	//fmt.Println("bytes len:", len(b))
 	x := len(MagicNumber)
 	copy(b[:x], MagicNumber)
 	copy(b[x:x+2], toBytes(p.Entry))

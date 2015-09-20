@@ -2,7 +2,6 @@ package vm
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -66,7 +65,7 @@ func (e *Encoder) sections(secs []Section) {
 			for k, v := range x.m {
 				addr := uint16(e.buf.Len())
 				e.ob.AddSymbol(k, TEXT, addr)
-				fmt.Println("new symbol:", k, addr)
+				//fmt.Println("new symbol:", k, addr)
 				e.sub(v)
 			}
 			e.ob.setSection(TEXT, e.buf.Bytes())
@@ -87,7 +86,7 @@ func (e *Encoder) sub(il []*Instruction) {
 			if !ok {
 				log.Fatal("undeclared symbol", i.Value)
 			}
-			fmt.Println(e.ob.LookupSymbolIndex(i.Value), e.buf.Len()+1)
+			//fmt.Println(e.ob.LookupSymbolIndex(i.Value), e.buf.Len()+1)
 			e.ob.AddRelocate(e.ob.LookupSymbolIndex(i.Value), uint16(e.buf.Len()+1))
 			b := toBytes(s.Address())
 			e.emit(byte(i.Op), b[0], b[1])
