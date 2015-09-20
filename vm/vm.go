@@ -162,7 +162,7 @@ func (c *CPU) fetch() {
 	c.pc++
 	c.dr = c.mem[c.ar] // fetch instruction into data register
 	c.ir = c.dr
-	//fmt.Println("c.ar:", c.ar, "c.ir:", c.ir)
+	fmt.Println("c.ar:", c.ar, "c.ir:", c.ir)
 }
 
 func (c *CPU) run() {
@@ -190,13 +190,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	o, err := vm.ScanObject(b)
+	p, err := vm.ScanProgram(b)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	fmt.Println(p)
+	fmt.Println(p.SecTab[vm.TEXT])
 	cpu := new(CPU)
-	cpu.init(o.Entry, o.SecTab[vm.TEXT])
+	cpu.init(p.Entry, p.SecTab[vm.TEXT])
 	cpu.run()
 	fmt.Println("exit with result:", cpu.ac)
 }

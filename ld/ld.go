@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -14,6 +15,9 @@ func load(b []byte) *vm.Object {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println("text", o.SecTab[vm.TEXT])
+	fmt.Println("symtab", o.SymTab)
+	fmt.Println("relocs", o.RelocTab)
 	return o
 }
 
@@ -26,7 +30,7 @@ func main() {
 		return
 	}
 
-	prog := vm.NewObject()
+	o := vm.NewObject()
 	for _, fname := range flag.Args() {
 		f, err := os.Open(fname)
 		if err != nil {
@@ -38,11 +42,12 @@ func main() {
 			log.Fatal(err)
 		}
 
-		if err := prog.Merge(load(b)); err != nil {
+		if err := o.Merge(load(b)); err != nil {
 			log.Fatal(err)
 		}
 		f.Close()
 	}
+	fmt.Println("merged text", o.SecTab[vm.TEXT])
 
 	f, err := os.Create(*out)
 	if err != nil {
@@ -50,6 +55,9 @@ func main() {
 	}
 	defer f.Close()
 
+	prog := vm.NewProgram(o)
+	fmt.Println("prog text", prog.SecTab[vm.TEXT])
+	fmt.Println(prog.Bytes())
 	n, err := f.Write(prog.Bytes())
 	if err != nil {
 		log.Fatal(err)

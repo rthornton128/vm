@@ -12,11 +12,9 @@ type Encoder struct {
 	io.Writer
 	buf *bytes.Buffer
 	ob  *Object
-	//stab map[string]uint16
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	//o, _ := ScanObject([]byte{})
 	return &Encoder{Writer: w, buf: new(bytes.Buffer), ob: NewObject()}
 }
 
@@ -32,7 +30,6 @@ func (e *Encoder) Encode(src []byte) error {
 
 	// generate text & data bytes
 	if err := e.file(f); err != nil {
-		//log.Fatal(err)
 		return err
 	}
 
@@ -69,7 +66,6 @@ func (e *Encoder) sections(secs []Section) {
 			for k, v := range x.m {
 				addr := uint16(e.buf.Len())
 				e.ob.AddSymbol(k, TEXT, addr)
-				e.ob.AddRelocate(e.ob.LookupSymbolIndex(k), addr)
 				fmt.Println("new symbol:", k, addr)
 				e.sub(v)
 			}
@@ -91,6 +87,8 @@ func (e *Encoder) sub(il []*Instruction) {
 			if !ok {
 				log.Fatal("undeclared symbol", i.Value)
 			}
+			fmt.Println(e.ob.LookupSymbolIndex(i.Value), e.buf.Len()+1)
+			e.ob.AddRelocate(e.ob.LookupSymbolIndex(i.Value), uint16(e.buf.Len()+1))
 			b := toBytes(s.Address())
 			e.emit(byte(i.Op), b[0], b[1])
 		case MVI:
