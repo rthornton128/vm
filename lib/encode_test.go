@@ -4,7 +4,7 @@ package vm_test
 func TestEncodeMinimal(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
-	if err := e.Encode([]byte{}); err != nil {
+	if err := e.Encode(strings.NewReader("")); err != nil {
 		log.Fatal(err)
 	}
 
@@ -23,7 +23,7 @@ func TestEncodeMinimal(t *testing.T) {
 func TestLiteral(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
-	if err := e.Encode([]byte("123;0xa;0177")); err != nil {
+	if err := e.Encode(strings.NewReader("123;0xa;0177")); err != nil {
 		t.Fatal(err)
 	}
 	output := b.Bytes()
@@ -36,11 +36,11 @@ func TestLiteral(t *testing.T) {
 		}
 	}
 
-	if err := e.Encode([]byte("0xfff")); err == nil {
+	if err := e.Encode(strings.NewReader("0xfff")); err == nil {
 		t.Fatal("expected error, got none")
 	}
 
-	if err := e.Encode([]byte("xf")); err == nil {
+	if err := e.Encode(strings.NewReader("xf")); err == nil {
 		t.Fatal("expected error, got none")
 	}
 }
@@ -48,7 +48,7 @@ func TestLiteral(t *testing.T) {
 func TestInstructions(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
-	if err := e.Encode([]byte("nop\njnz\nadd\nsw")); err != nil {
+	if err := e.Encode(strings.NewReader("nop\njnz\nadd\nsw")); err != nil {
 		t.Fatal(err)
 	}
 	output := b.Bytes()
@@ -61,7 +61,7 @@ func TestInstructions(t *testing.T) {
 		}
 	}
 
-	if err := e.Encode([]byte("asdf")); err == nil {
+	if err := e.Encode(strings.NewReader("asdf")); err == nil {
 		t.Fatal("expected error, got none")
 	}
 }
@@ -69,7 +69,7 @@ func TestInstructions(t *testing.T) {
 func TestRegisters(t *testing.T) {
 	b := new(bytes.Buffer)
 	e := vm.NewEncoder(b)
-	if err := e.Encode([]byte("$a;$c;$sp")); err != nil {
+	if err := e.Encode(strings.NewReader("$a;$c;$sp")); err != nil {
 		t.Fatal(err)
 	}
 	output := b.Bytes()
@@ -82,7 +82,7 @@ func TestRegisters(t *testing.T) {
 		}
 	}
 
-	if err := e.Encode([]byte("$asdf")); err == nil {
+	if err := e.Encode(strings.NewReader("$asdf")); err == nil {
 		t.Fatal("expected error, got none")
 	}
 }*/

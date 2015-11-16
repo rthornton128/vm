@@ -22,3 +22,8 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+# Vim swap, Go cover output and vm object files
+*.out
+*.swp
+*.vm

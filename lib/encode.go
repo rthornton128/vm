@@ -2,6 +2,7 @@ package vm
 
 import (
 	"bytes"
+	"go/token"
 	"io"
 	"log"
 	"strconv"
@@ -10,20 +11,22 @@ import (
 type Encoder struct {
 	io.Writer
 	buf *bytes.Buffer
+	f   *token.File
 	ob  *Object
 }
 
-func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{Writer: w, buf: new(bytes.Buffer), ob: NewObject()}
+func NewEncoder(f *token.File, w io.Writer) *Encoder {
+	return &Encoder{Writer: w, buf: new(bytes.Buffer), f: f, ob: NewObject()}
 }
 
-func (e *Encoder) Encode(src []byte) error {
-	f, errs := Parse(src)
+func (e *Encoder) Encode(r io.Reader) error {
+	f, errs := Parse(e.f, r)
 	// TODO need error list satisfying error interface
 	if len(errs) > 0 {
 		for _, err := range errs {
 			log.Println(err)
 		}
+		// TODO bad, should return error, see previous todo
 		log.Fatal("failed to assemble file")
 	}
 

@@ -3,9 +3,11 @@ package vm
 import (
 	"errors"
 	"fmt"
+	"go/token"
+	"io"
 	"log"
 
-	"github.com/rthornton128/gompto/lex"
+	"github.com/rthornton128/gct/lex"
 )
 
 type Parser struct {
@@ -13,20 +15,18 @@ type Parser struct {
 	errors []error
 	offset int
 
-	lit string
-	pos int
-	tok lex.Token
+	item lex.Item
 }
 
-func Parse(src []byte) (*File, []error) {
-	p := newParser(string(src))
-	f := p.parseFile()
-	return f, p.errors
+func Parse(f *token.File, r io.Reader) (*File, []error) {
+	p := newParser(f, r)
+	file := p.parseFile()
+	return file, p.errors
 }
 
-func newParser(src string) *Parser {
+func newParser(f *token.File, r io.Reader) *Parser {
 	s := new(lex.BasicScanner)
-	s.Init(src)
+	s.Init(f, r)
 	l := lex.NewLex(s)
 	l.Symbols = symbols
 	p := &Parser{
@@ -39,19 +39,19 @@ func newParser(src string) *Parser {
 
 func (p *Parser) error(args ...interface{}) {
 	p.errors = append(p.errors,
-		errors.New(fmt.Sprint("line: ", p.pos, " - ", args)))
+		errors.New(fmt.Sprint("line: ", p.item.Pos, " - ", args)))
 }
 
 func (p *Parser) expect(t lex.Token) {
-	if p.tok != t {
+	if p.item.Tok != t {
 		//fmt.Println("expected", t, "got:", p.tok, " (", p.lit, ")")
-		p.error("expected", t, "got:", p.tok, " (", p.lit, ")")
+		p.error("expected", t, "got:", p.item.Tok, " (", p.item.Lit, ")")
 	}
 	p.next()
 }
 
 func (p *Parser) ident() string {
-	l := p.lit
+	l := p.item.Lit
 	p.expect(lex.IDENT)
 	return l
 }
@@ -76,19 +76,19 @@ func (p *Parser) instruction(id string) *Instruction {
 }
 
 func (p *Parser) literal() string {
-	l := p.lit
+	l := p.item.Lit
 	p.expect(lex.INT)
 	return l
 }
 
 func (p *Parser) next() {
-	p.lit, p.tok, p.pos = p.lexer.Lex()
+	p.item = p.lexer.Lex()
 	//fmt.Println("next:", p.lit, p.tok, p.pos)
 }
 
 func (p *Parser) register() Register {
 	p.expect(PERCENT)
-	r, err := LookupRegister(p.lit)
+	r, err := LookupRegister(p.item.Lit)
 	if err != nil {
 		p.error(err)
 	}
@@ -98,14 +98,14 @@ func (p *Parser) register() Register {
 
 func (p *Parser) parseFile() *File {
 	sections := make([]Section, 0)
-	for p.tok != lex.EOF {
+	for p.item.Tok != lex.EOF {
 		p.expect(DOT)
 		ident := p.ident()
 		switch ident {
 		case "text":
 			sections = append(sections, p.sectionText())
 		default:
-			p.error("expected valid section name, got", p.lit)
+			p.error("expected valid section name, got", p.item.Lit)
 			return nil
 		}
 	}
@@ -130,9 +130,9 @@ func (p *Parser) sectionData() *DataSection {
 func (p *Parser) sectionText() *TextSection {
 	text := make(map[string][]*Instruction)
 	var sub string
-	for p.tok == lex.IDENT {
+	for p.item.Tok == lex.IDENT {
 		id := p.ident()
-		if p.tok == COLON { // new subroutine
+		if p.item.Tok == COLON { // new subroutine
 			sub = id
 			p.next()
 			continue

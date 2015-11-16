@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
-	"io/ioutil"
+	"go/token"
 	"log"
 	"os"
 
@@ -13,30 +13,31 @@ import (
 func main() {
 	flag.Parse()
 
-	f, err := os.Open(flag.Arg(0))
+	in, err := os.Open(flag.Arg(0))
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	src, err := ioutil.ReadAll(f)
-	if err != nil {
-		log.Fatal(err)
-	}
-	f.Close()
+	defer in.Close()
 
 	// encoding
-	buf := new(bytes.Buffer)
-	e := vm.NewEncoder(buf)
-	if err := e.Encode(src); err != nil {
-		log.Fatal(err)
-	}
-
-	f, err = os.Create(flag.Arg(0) + ".o") // TODO fix extention handling
+	fset := token.NewFileSet()
+	info, err := in.Stat()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
+	f := fset.AddFile(flag.Arg(0), -1, int(info.Size()))
+	buf := new(bytes.Buffer)
+	e := vm.NewEncoder(f, buf)
+	if err := e.Encode(in); err != nil {
+		log.Fatal(err)
+	}
+
+	out, err := os.Create(flag.Arg(0) + ".o") // TODO fix extention handling
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer out.Close()
 
 	//fmt.Println(buf.Bytes())
-	f.Write(buf.Bytes())
+	out.Write(buf.Bytes())
 }
